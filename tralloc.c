@@ -109,23 +109,21 @@ void *tralloc(size_t size) {
 
     // Try to find a node already in the tree
     header *found = remove_chunk_by_size(fake_root, size);
-    if(found) {
-        if(found->size >= size + footer_pad + header_pad + node_pad) {
-            // There was a returned chunk, and that chunk has a dividend. (It's large enough to be divided.)
-            header *dividend = (header *)((char *)found + header_pad + size + footer_pad);
-            dividend->size = found->size - size - footer_pad - header_pad;
-            dividend->in_use = false;
-            header_to_footer(dividend)->size = dividend->size;
-            fake_root = add_chunk(fake_root, dividend, NULL);
-
-            found->size = size;
-            header_to_footer(found)->size = size;
-        }
-    } else {
+    if(!found) {
+        // Need to allocate for another chunk.
         found = (header *)sbrk(header_pad + size + footer_pad);
-        if(!first_chunk)
-            first_chunk = (void *)found;
+        if(!first_chunk) first_chunk = (void *)found;
         guard_addr = (void *)((char *)found + header_pad + size + footer_pad);
+        found->size = size;
+        header_to_footer(found)->size = size;
+    } else if(found->size >= size + footer_pad + header_pad + node_pad) {
+        // There was a returned chunk, and that chunk has a dividend. (It's large enough to be divided.)
+        header *dividend = (header *)((char *)found + header_pad + size + footer_pad);
+        dividend->size = found->size - size - footer_pad - header_pad;
+        dividend->in_use = false;
+        header_to_footer(dividend)->size = dividend->size;
+        fake_root = add_chunk(fake_root, dividend, NULL);
+
         found->size = size;
         header_to_footer(found)->size = size;
     }
@@ -248,8 +246,7 @@ static header *find_smallest(header *tree) {
 }
 
 static inline size_t ceil_size(size_t input, size_t offset) {
-    if(input % offset)
-        return input - (input % offset) + offset;
+    if(input % offset) return input - (input % offset) + offset;
     return input;
 }
 
@@ -268,8 +265,7 @@ void traudit(FILE *f) {
     fprintf(f, "header_pad: %lu\n", header_pad);
     fprintf(f, "footer_pad: %lu\n", footer_pad);
     fprintf(f, "node_pad: %lu\n", node_pad);
-    if(!(first_chunk && guard_addr))
-        goto traudit_end;
+    if(!(first_chunk && guard_addr)) goto traudit_end;
     header *cur = (header *)first_chunk;
     node *cur_node = header_to_node(cur);
     footer *cur_footer = header_to_footer(cur);
@@ -323,6 +319,5 @@ static void fprint_tree(FILE *f, header *tree, int depth) {
 
 static inline void fprint_depth_padding(FILE *f, int depth) {
     int i;
-    for(i = 0; i < depth * 4; i++)
-        fprintf(f, " ");
+    for(i = 0; i < depth * 4; i++) fprintf(f, " ");
 }
